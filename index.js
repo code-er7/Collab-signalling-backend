@@ -5,54 +5,50 @@ const { Server } = require("socket.io");
 const io = new Server(8000, {
   cors: true,
 });
-const connectedUsers = new Map(); // Store connected users in the room.
+const users = {}; // Store connected users in the room.
 
 io.on("connection", (socket) => {
-  //prints when new socket connection is formed
+  // Prints when a new socket connection is formed
   console.log(`Socket Connected`, socket.id);
 
-
-  //initates when a user tries to get into a existing room or try to create a new room from lobby
-  socket.on("room:join", (data) => {
+  // Initiates when a user tries to get into an existing room or tries to create a new room from the lobby
+  socket.on("room:join", async (data) => {
     const { email, room } = data;
-    connectedUsers.set(socket.id, email); // Store the user's socket ID and email in the map.
-    console.log("new user  joined "  , room);
-  //sends the details of the all the user to all the users when a new user is joined the room 
-    io.to(room).emit("user:joined", {
-      email,
-      id: socket.id,
-      users: Array.from(connectedUsers.values()),
-    });
-    //pushes the new user into the room from the lobby 
+    console.log("new user joined ", room);
+
+    if (users[room]) {
+      if (!users[room].some((id) => id === socket.id))
+        users[room].push(socket.id);
+    } else {
+      users[room] = [socket.id]; // Initialize the users[room] array with the new socket ID
+    }
+    // Enter the new user into the room
+    await socket.join(room);
+
+    // Pushes the new user into the room from the lobby
     io.to(socket.id).emit("room:join", {
       ...data,
-      // users: Array.from(connectedUsers.values()),
     });
-    io.to(socket.id).emit("mycredentials", {
-      ...data,
+
+    // Now the user is in the lobby - the server emits get:users to the new user sending its own socketid and
+    // all the users in the room
+    const allUsersInTheRoom = users[room].filter((id) => id !== socket.id);
+    // Delay the emission of "get:users" event by 100ms using setTimeout
+    setTimeout(() => {
+      socket.emit("get:users", { users: allUsersInTheRoom, id: socket.id });
+    }, 100);
+  });
+
+
+
+
+  // Handle disconnect event
+  socket.on("disconnect:me", () => {
+    console.log(`Socket disconnected: ${socket.id}`);
+    // Find the room where the user was present and remove their socket ID
+    Object.keys(users).forEach((room) => {
+      users[room] = users[room].filter((id) => id !== socket.id);
     });
-    socket.join(room);
-
-});
-
-
-
-
-
-
-
-
-
-
-
-//disconnect the sockett
-    socket.on("disconnect", () => {
-      const email = connectedUsers.get(socket.id);
-      if (email) {
-        connectedUsers.delete(socket.id);
-        const users = Array.from(connectedUsers.values());
-        io.emit("user:left", { email, users });
-      }
-    });
-  
+    socket.disconnect(true);
+  });
 });
