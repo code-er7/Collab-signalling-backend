@@ -35,8 +35,23 @@ io.on("connection", (socket) => {
     const allUsersInTheRoom = users[room].filter((id) => id !== socket.id);
     // Delay the emission of "get:users" event by 100ms using setTimeout
     setTimeout(() => {
+      console.log("sent all the users");
       socket.emit("get:users", { users: allUsersInTheRoom, id: socket.id });
     }, 100);
+  });
+
+
+  //listning for the  sendOffer event so that can recive the offer from the user 
+  socket.on("sendOffer" , (data)=>{
+    const {targetUserId , offer}= data;
+    console.log("got offer for " , targetUserId);
+    //sending the offer to the intended user 
+    io.to(targetUserId).emit("recieve:offer" , {senderId: socket.id , offer });
+  });
+  socket.on("sending:ans" , (data)=>{
+    const { senderId , ans } = data ; 
+    console.log("got ans for ", senderId);
+    io.to(senderId).emit("recieving:ans" , { ans , senderId:  socket.id});
   });
 
 
